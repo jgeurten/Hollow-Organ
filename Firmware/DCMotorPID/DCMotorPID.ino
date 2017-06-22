@@ -9,41 +9,43 @@ volatile unsigned long motorW;
 void encoderISR()
 {
   edgeCount++;
+
 }
 
-ISR(TIMER3_COMPA_vect){
-  motorW = edgeCount / (2 * 16); //divided by 1 second [revolutions/second]
+ISR(TIMER1_OVF_vect) {
+  motorW = edgeCount / (2 * 16); //divided by 1 second [revolutions/minute]
   edgeCount = 0;
-
-  Serial.print("Speed:"); 
   Serial.println(motorW); 
+  TCNT1=0x85EE; //restart timer with value of 34286 to give 1Hz
 }
 
 void setup()
 {
-  Serial.begin(9600); 
+  Serial.begin(9600);
   pinMode(encoder, INPUT);
   pinMode(motor, OUTPUT);
   pinMode(voltage, OUTPUT);
   digitalWrite(voltage, HIGH);
 
   cli();
-  TCCR3A = 0; //change number 3 to 1 incase of non functioning
-  TCCR3B = 0;
-  OCR3A = 15624; //#timer counts + 1 = 1s/6.4e-5  [target time/timer res]
-
-  TCCR3B |= (1 << WGM12); //set CTC mode
-  //bit shifting for 1024 prescalar
-  TCCR3B |= (1<< CS10); 
-  TCCR3B |= (1<< CS12);    
-  TIMSK3 |= (1 << OCIE3A);
-
+  TCCR1A = 0; 
+  TCCR1B = 0;
+  TIMSK1 |= (1 << TOIE1);
+  TCNT1=0x85EE; //since using 8MHz clock, arduino example is doubled to give 1Hz
+  TCCR1B |= (1 << CS12);
   sei();
+  
   attachInterrupt(digitalPinToInterrupt(encoder), encoderISR, CHANGE);
+  analogWrite(motor, 200);
 }
 
 void loop()
 {
-  analogWrite(motor, 200);
+  /*for (int i = 100; i <= 255; i++) {
+    analogWrite(motor, i);
+    Serial.print("Voltage:");
+    Serial.println(i);
+    delay(500);
+  }*/
 }
 
