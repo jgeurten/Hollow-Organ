@@ -13,12 +13,12 @@ void encoderISR()
   edgeCount++;
 }
 
-ISR(TIMER#_OVF_vect){
+ISR(TIMER3_OVF_vect){
   cli();
   motorW = edgeCount / (2 * 16); //divided by 1 second
   edgeCount = 0;
   TCNT3 = 0x0BDC;
-  sei(); 
+  sei();
 }
 
 void setup()
@@ -29,7 +29,7 @@ void setup()
   digitalWrite(voltage, HIGH);
 
   cli();
-  TCCR3A = 0;
+  TCCR3A = 0; //change number 3 to 1 incase of non functioning
   TCCR3B = 0;
 
   TIMSK3 |= (1 << TOIE3);
@@ -41,6 +41,6 @@ void setup()
 
 void loop()
 {
-  analogWrite(motor, 200); 
+  analogWrite(motor, 200);
 }
 
