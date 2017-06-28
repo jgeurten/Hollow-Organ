@@ -40,8 +40,8 @@ void loop() {
   for(x= 1; x<1000; x++)  //Loop the forward stepping enough times for motion to be visible
   {
     digitalWrite(STEP,HIGH); //Trigger one step forward
-    delayMicroseconds(250);
+    delayMicroseconds(125);
     digitalWrite(STEP,LOW); //Pull step pin low so it can be triggered again
-    delayMicroseconds(250);
+    delayMicroseconds(125);
   }
 }
