@@ -45,7 +45,8 @@ void encoderISR()
 ISR(TIMER1_OVF_vect) {
   motorSpeed = (double) edgeCount * 60 / (2 * 16 * 50); // multiply by the gear ratio (50:1) divided by 1 second [revolutions/minute]
   edgeCount = 0;
-
+  
+  calculateError(); 
   TCNT1 = 0x85EE; //restart timer with value of 34286 to give 1Hz
 }
 
@@ -71,9 +72,51 @@ void STOP ()
   StopMotor();
 }
 
+//call during Timer1 OVF ISR
+
 void calculateError()
 {
-    
+Error = desiredSpeed - motorSpeed;
+if(Kp > 0)
+{
+  KpOutput = Kp*Error;
+  ControllerOutput = KpOutput;
+}
+
+if (Kd > 0)
+{
+  KdOutput = Kd*(Error-prevError)*Kdfreq;
+  ControllerOutput += KdOutput;
+}
+  
+if(Ki > 0)
+{
+  Integral += Error*Period;
+   //Period =1s
+   KiOutput = Ki*Integral;
+  ControllerOutput += KiOutput;
+}
+
+  prevError = Error;
+  ControllerOutput *= VtoPWM;
+  //VtoPWM = 255/V_in 
+}
+
+void RunMotor(float ControllerOutput)
+{
+  if(!STOP && Go)
+  {
+
+    ControllerOutput =abs(ControllerOutput);
+    if(ControllerOutput > 255)
+       ControllerOutput = 255;
+
+    analogWrite(motor, ControllerOutput);
+}
+
+void OpenLoopStep()
+{
+  ControllerOutput = Ref_Input;
 }
 
 void setup()
