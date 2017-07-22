@@ -1,39 +1,91 @@
-////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
 // DC Motor PID Controller Code
 // Version 1, July 10
 // Jordan Geurten
-////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////
 
 #include <math.h>
+#include <MSTimer2.h>
 
+///////////////////////////////////////////////////////////////////////////////////////////
 // Motor pins
+///////////////////////////////////////////////////////////////////////////////////////////
 
-#define stopPin   0
-#define startPin  1
-#define encoder   2
-#define voltage   3
-#define motor     5
-
-//Desired speed:
-#define SPEED     30    //in RPM
+static byte stopPin      0             //feather interrupt pin2
+static byte startPin     1             //feather interrupt pin3
+static byte encoderPin   2             //feather interrupt pin1
+static byte voltagePin   3             //feather interrupt pin0
+static byte motorPin     5
 
 //Global variables:
 
 volatile byte Go = 0;                      //Interrupt flag for START
 volatile byte Stop = 0;                    //Interrup flag for STOP
-volatile double Error = 0;                 //Speed error
+volatile double Error = 0;                 //Ref_Speed Error
+volatile double prevError = 0;             //Prev Ref_Speed Error
 volatile double KpOutput = 0;              //Proportional output
 volatile double KiOutput = 0;              //Integral output
 volatile double KdOutput = 0;              //Derivative output
+volatile double Controller_Input = 0;       //Output from Error calc
+volatile double VtoPWM = 0;                //Define relation between voltage and pwm
 
 volatile unsigned long edgeCount = 0;      //Encoder edge count
-volatile double motorSpeed = 0;            //Motor speed in RPM
+volatile double Motor_Speed = 0;            //Motor Ref_Speed in RPM
 
+///////////////////////////////////////////////////////////////////////////////////////////
 //User defined variables:
+///////////////////////////////////////////////////////////////////////////////////////////
 
 double Kp = 0;                             //Proportional gain
 double Ki = 0;                             //Integral gain
 double Kd = 0;                             //Derivative gain
+
+//Define input voltage
+float V_in  = 12.0;
+
+//Timer timeout period in ms
+static unsigned int Period = 50;
+
+//Desired Speed [in RPM]
+static unsigned int Ref_Speed =  30;
+
+//Open loop variables [in RPM]
+volatile float Ref_Input = 0;
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Mode of Operation:
+//
+//      0 = Open Loop Step    -- applies a constant voltage to motor
+//                            Inputs  ---------------------------------------------------
+//                            Step_Input -- sets the duty cycle of PWM output; an integer
+//                                          value between 0 and 255
+//                            I_Gain -- Gain of Input Filter function I(s) in encoder counts/radians
+//                            Time -- sets the duration of the test in seconds
+//
+//                            Outputs ---------------------------------------------------
+//                            Reference_Input -- duty cycle of PWM output; an integer value
+//                                               between 0 and 255
+//                            Time -- sets the duration of the test in seconds
+
+//
+//      1 = Closed Loop Step    -- PID Controller
+//                            Inputs  ---------------------------------------------------
+//                            Kp, Ki, Kd -- Proportional, integral, derivative gains, respectively
+//                            Time -- sets the duration of the test in seconds
+
+//                            Outputs ---------------------------------------------------
+
+//                            Reference_Input -- duty cycle of PWM output; an integer value
+//                                               between 0 and 255
+//                            Time -- sets the duration of the test in seconds
+
+
+///////////////////////////////////////////////////////////////////////////////////////////
+//Declare mode of operation:
+
+static byte mode = 0;
+
+
 
 //ISR to increment count of encoder to count its square wave frequency
 void encoderISR()
@@ -41,111 +93,125 @@ void encoderISR()
   edgeCount++;
 }
 
-//Every second, timer overflows and the speed of the motor is calculated. Encoder count is reset.
-ISR(TIMER1_OVF_vect) {
-  motorSpeed = (double) edgeCount * 60 / (2 * 16 * 50); // multiply by the gear ratio (50:1) divided by 1 second [revolutions/minute]
-  edgeCount = 0;
-  
-  calculateError(); 
-  TCNT1 = 0x85EE; //restart timer with value of 34286 to give 1Hz
+void TimerISR()
+{
+  motor_Speed = (double) edgeCount * 60 / (2 * 16 * 50);
+  // multiply by the gear ratio (50:1) divided by 1 second [revolutions/minute]
+
+  calculateError();
+  //TCNT1 = 0x85EE;                       //restart timer with value of 34286 to give 1Hz
+  if (mode == 0)
+    OpenLoopStep();                       //get constant voltage value
+
+  if (mode == 1)
+    ClosedLoopStep();                     //get error from motor speed and ref_speed
+
+  edgeCount = 0;                          //Reset encoder count
 }
 
 //Function to stop motor:
 void StopMotor()
 {
-  analogWrite(motor, 0);
-  digitalWrite(voltage, LOW);
+  analogWrite(motorPin, 0);                  //Cut voltage to motor
+  digitalWrite(voltagePin, LOW);
 }
 
 //Interrupt function to start system:
 void START()
 {
-  Stop = 0; 
-  Go = 1; 
+  Stop = 0;
+  Go = 1;
 }
 
 //Interrupt function to stop system:
 void STOP ()
 {
-  Stop = 1; 
-  Go = 0; 
+  Stop = 1;
+  Go = 0;
   StopMotor();
 }
 
 //call during Timer1 OVF ISR
 
-void calculateError()
+void ClosedLoopStep()
 {
-Error = desiredSpeed - motorSpeed;
-if(Kp > 0)
-{
-  KpOutput = Kp*Error;
-  ControllerOutput = KpOutput;
-}
+  Error = Ref_Speed - Motor_Speed;
+  if (Kp > 0)
+  {
+    KpOutput = Kp * Error;
+    Controller_Input = KpOutput;
+  }
 
-if (Kd > 0)
-{
-  KdOutput = Kd*(Error-prevError)*Kdfreq;
-  ControllerOutput += KdOutput;
-}
-  
-if(Ki > 0)
-{
-  Integral += Error*Period;
-   //Period =1s
-   KiOutput = Ki*Integral;
-  ControllerOutput += KiOutput;
-}
+  if (Kd > 0)
+  {
+    KdOutput = Kd * (Error - prevError) * Kdfreq;
+    Controller_Input += KdOutput;
+  }
+
+  if (Ki > 0)
+  {
+    Integral += Error * Period;
+    //Period =1s
+    KiOutput = Ki * Integral;
+    Controller_Input += KiOutput;
+  }
 
   prevError = Error;
-  ControllerOutput *= VtoPWM;
-  //VtoPWM = 255/V_in 
+  Controller_Input *= VtoPWM;
 }
 
-void RunMotor(float ControllerOutput)
+void RunMotor(float input)
 {
-  if(!STOP && Go)
+  if (!Stop && Go)
   {
 
-    ControllerOutput =abs(ControllerOutput);
-    if(ControllerOutput > 255)
-       ControllerOutput = 255;
+    input = abs(input);
+    if (input > 255)
+      input = 255;
 
-    analogWrite(motor, ControllerOutput);
+    analogWrite(motorPin, input);
+  }
 }
 
 void OpenLoopStep()
 {
-  ControllerOutput = Ref_Input;
+  Controller_Input = Step_Input;
+  Ref_Input = Controller_Input;
 }
 
 void setup()
 {
   Serial.begin(9600);
-  pinMode(encoder, INPUT);
-  pinMode(motor, OUTPUT);
-  pinMode(voltage, OUTPUT);
-  digitalWrite(voltage, HIGH);
+  pinMode(encoderPin, INPUT);
+  pinMode(startPin, INPUT);
+  pinMode(stopPin, INPUT);
+  pinMode(motorPin, OUTPUT);
+  pinMode(voltagePin, OUTPUT);
+  digitalWrite(voltagePin, HIGH);
+  /*
+    cli();
+    TCCR1A = 0;
+    TCCR1B = 0;
+    TIMSK1 |= (1 << TOIE1);
+    TCNT1 = 0x85EE; //since using 8MHz clock, arduino example is doubled to give 1Hz
+    TCCR1B |= (1 << CS12);
+    sei();
+  */
+  MsTimer2::set(Period, TimerISR);
+  attachInterrupt(digitalPinToInterrupt(encoderPin), encoderISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(stopPin), STOP, RISING);
+  attachInterrupt(digitalPinToInterrupt(startPin), START, RISING);
 
-  cli();
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TIMSK1 |= (1 << TOIE1);
-  TCNT1 = 0x85EE; //since using 8MHz clock, arduino example is doubled to give 1Hz
-  TCCR1B |= (1 << CS12);
-  sei();
-
-  attachInterrupt(digitalPinToInterrupt(encoder), encoderISR, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(encoder), encoderISR, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(encoder), encoderISR, CHANGE);
-
-  analogWrite(motor, 120);
+  VtoPWM = 255 / V_in;
+  
+  MsTimer2::start();
 }
 
 void loop()
 {
-
+  if (Stop)
+    while (1)     //Require MCU reset
+    {
+    }
 }
-
-
 
