@@ -1,4 +1,4 @@
-  ///////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////
   // DC Motor PID Controller Code
   // Version 1, July 10
   // Jordan Geurten
@@ -16,6 +16,8 @@
   unsigned int encoderPin =  2;             //feather interrupt pin1
   unsigned int voltagePin =  3;             //feather interrupt pin0
   unsigned int motorPin =    5;
+
+  unsigned int Motor_Current;               //Pin to read current input from motor controller. WAit, we dont have a motor controller. 
   
   //Global variables:
   
@@ -172,7 +174,7 @@ void  OpenLoopStep();
   
     if (Ki > 0)
     {
-      Integral += Error * Period;                 //
+      Integral += Error * Period;                 //integral = sum of the errors*period -- integral is reset every 
       KiOutput = Ki * Integral;
       Controller_Input += KiOutput;
     }
