@@ -1,11 +1,11 @@
-#define  ENABLE   2
-#define  RST      3
+#define  ENABLE   12
+#define  RST      6
 #define  SLEEP    5
-#define  MS1      6
+#define  MS1      11
 #define  MS2      10
-#define  MS3      11
-#define  STEP     12
-#define  DIR      13
+#define  MS3      9
+#define  STEP     3
+#define  DIR      2
 
 int count = 0;
 int x;
