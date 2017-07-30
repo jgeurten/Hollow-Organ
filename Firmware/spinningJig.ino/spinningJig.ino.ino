@@ -2,14 +2,16 @@
 
 #define  ENCA     0  //encoder pin1
 #define  ENCB     1  //encoder pin2
-#define  DIR      2
-#define  STEP     3
+#define  GOPIN    2  //go button pin
+#define  STOPPIN  3  //Stop button pin
 #define  SLEEP    5
 #define  RST      6
 #define  MS3      9
 #define  MS2      10
 #define  MS1      11
 #define  ENABLE   12
+#define  DIR      14  //miso
+#define  STEP     16  //mosi pin (also digital)
 
 volatile long count = 0;
 int x;
@@ -22,6 +24,18 @@ void encoderISR_A()
 void encoderISR_B()
 {
   count++; 
+}
+
+void goISR()
+{
+  GO = 1; 
+  STOP = 0; 
+}
+
+void stopISR()
+{
+  STOP = 1; 
+  GO = 0; 
 }
 void setup() {
   //Motor output pins:
@@ -38,6 +52,10 @@ void setup() {
   pinMode(ENCA, INPUT); 
   pinMode(ENCB, INPUT); 
   
+  //Buton input pins
+  pinMode(GOPIN, INPUT); 
+  pinMode(STOPPIN, INPUT); 
+  
   //initialize sixteenth step
   digitalWrite(MS1, LOW);
   digitalWrite(MS2, LOW);
@@ -53,6 +71,11 @@ void setup() {
   //Encoder interrupts:
   attachInterrupt(digitalPinToInterrupt(ENCA), encoderISR_A, RISING); 
   attachInterrupt(digitalPinToInterrupt(ENCB), encoderISR_B, RISING); 
+  
+  //Button interrupts:
+  attachInterrupt(digitalPinToInterrupt(GOPIN), goISR, RISING); 
+  attachInterrupt(digitalPinToInterrupt(STOPPIN), stopISR, RISING); 
+
 }
 
 void loop() {
