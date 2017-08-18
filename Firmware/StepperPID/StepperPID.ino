@@ -12,10 +12,10 @@
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 
-#define  ENCA     0  //encoder pin1
-#define  ENCB     1  //encoder pin2
-#define  GOPIN    2  //go button pin
-#define  STOPPIN  3  //Stop button pin
+#define  ENCA     0  //Interrupt encoder pin1
+#define  ENCB     1  //Interrupt encoder pin2
+#define  GOPIN    2  //Interrupt go button pin
+#define  STOPPIN  3  //Interrupt Stop button pin
 #define  SLEEP    5
 #define  RST      6
 #define  MS3      9
@@ -42,7 +42,7 @@ volatile double Integral = 0;              //Integral of the error
 
 volatile unsigned long edgeCount = 0;      //Encoder edge count
 volatile double Motor_Speed = 0;            //Motor Ref_Speed in RPM
-volatile float Elapsed_Time = 0;           //Elapsed time of the test
+volatile double Elapsed_Time = 0;           //Elapsed time of the test
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 //User defined variables:
@@ -56,7 +56,7 @@ double Kd = 0;                             //Derivative gain
 float V_in  = 12.0;
 
 //Timer timeout period in ms
-static unsigned int Period = 50;
+double Period = 50.0;
 
 //Desired Speed [in RPM]
 static unsigned int Ref_Speed =  30;
@@ -68,7 +68,7 @@ volatile float Ref_Input = 0;
 volatile float Step_Input = 0;
 
 //Duration of the test [in seconds]:
-volatile float Time = 0;
+volatile float Time = 5;
 
 
 
@@ -111,7 +111,6 @@ static byte mode = 0;
 void  encoderISR_A();
 void  encoderISR_B();
 void  TimerISR();
-void  StopMotor();
 void  goISR();
 void  stopISR();
 void  ClosedLoopStep();
@@ -141,24 +140,27 @@ void TimerISR()
 //Function to stop motor:
 void StopMotor()
 {
-  analogWrite(motorPin, 0);                  //Cut voltage to motor
-  digitalWrite(voltagePin, LOW);
+  digitalWrite(RST, LOW);   //When set LOW, all STEP commands are ignored and all FET functionality is turned off
+  digitalWrite(ENABLE, HIGH); //If set to HIGH, all FETs will be disabled, restricting motor control.
+  while(1){Serial.println("Stop Motor");};
 }
 
 //External interrupt to increment encoder count:
 void encoderISR_A()
 {
-  count++; 
+  edgeCount++; 
 }
 
 void encoderISR_B()
 {
-  count++; 
+  edgeCount++; 
 }
 
 //Interrupt function to start system:
 void goISR()
 {
+  digitalWrite(RST, HIGH);   //This must be set HIGH to enable functionality of the motor driver.
+  digitalWrite(ENABLE, LOW); //If set to LOW, all FETs will be enabled, allowing motor control.
   Go = 1; 
   Stop = 0; 
 }
@@ -167,6 +169,7 @@ void stopISR()
 {
   Stop = 1; 
   Go = 0; 
+  StopMotor();
 }
 
 //call during Timer1 OVF ISR
@@ -205,7 +208,10 @@ void RunMotor(float input)
     if (input > 255)
       input = 255;
 
-    analogWrite(motorPin, input);
+   digitalWrite(STEP, LOW);           //stepping is triggered by rising edge
+   delayMicroseconds(input);
+   digitalWrite(STEP, HIGH);
+   delayMicroseconds(input);
   }
 }
 
@@ -266,18 +272,13 @@ void loop()
 {
   if (Stop)
   {
-    STOP();
-    while (1) {};    //Require MCU reset -- safety measure
+    StopMotor();
+    while (1) {Serial.println("In stop loop");};    //Require MCU reset -- safety measure
   }
 
-  if (Elapsed_Time * Period > Time)          //Elapsed time (counts)*time/tick = elapsed time
+  if (Elapsed_Time * Period/1000 > Time)          //Elapsed time (counts)*time/tick = elapsed time
   {
-    STOP();
-    while (1) {}; //Require MCU reset -- safety measure
+    StopMotor();
+    while (1) {Serial.println("Finished");}; //Require MCU reset -- safety measure
   }
-
-  Serial.println(Time);
-  Serial.println(Motor_Speed);
-  Serial.println(Controller_Input);
-
 }
