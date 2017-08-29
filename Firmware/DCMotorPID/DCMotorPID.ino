@@ -1,4 +1,4 @@
-    ///////////////////////////////////////////////////////////////////////////////////////////
+   ///////////////////////////////////////////////////////////////////////////////////////////
   // DC Motor PID Controller Code
   // Version 1, July 10
   // Jordan Geurten
@@ -11,8 +11,8 @@
   // Motor pins
   ///////////////////////////////////////////////////////////////////////////////////////////
   
-  unsigned int stopPin =     0;             //feather interrupt pin2
-  unsigned int startPin =    1;             //feather interrupt pin3
+  unsigned int stopPin =     1;             //feather interrupt pin2
+  unsigned int startPin =    0;             //feather interrupt pin3
   unsigned int encoderPin =  2;             //feather interrupt pin1
   unsigned int voltagePin =  3;             //feather interrupt pin0
   unsigned int motorPin =    5;
@@ -35,6 +35,8 @@
   volatile unsigned long edgeCount = 0;      //Encoder edge count
   volatile double Motor_Speed = 0;            //Motor Ref_Speed in RPM
   volatile float Elapsed_Time = 0;           //Elapsed time of the test
+  volatile double startTime = 0;             //Store last time start button was pressed
+  volatile double stopTime = 0;              //Store last stop button time
   
   ///////////////////////////////////////////////////////////////////////////////////////////
   //User defined variables:
@@ -143,16 +145,26 @@ void  OpenLoopStep();
   //Interrupt function to start system:
   void START()
   {
+    if(millis() - startTime > 1500)
+    {
     Stop = 0;
     Go = 1;
+    Serial.println("Gopressed"); 
+    startTime = millis(); 
+    }
   }
   
   //Interrupt function to stop system:
   void STOP ()
   {
+    if(millis() - stopTime > 1000)
+    {
     Stop = 1;
     Go = 0;
     StopMotor();
+    Serial.println("Stop pressed");
+    stopTime = millis(); 
+    }
   }
   
   //call during Timer1 OVF ISR
@@ -192,6 +204,7 @@ void  OpenLoopStep();
         input = 255;
   
       analogWrite(motorPin, input);
+      Serial.println("Running motor"); 
     }
   }
   
@@ -223,20 +236,17 @@ void  OpenLoopStep();
   
   void loop()
   {
-    if (Stop)
+    if(Go)
     {
-      STOP(); 
-      while (1) {};    //Require MCU reset -- safety measure
+      RunMotor(200); 
+      delay(1); 
     }
 
-    if(Elapsed_Time*Period > Time)             //Elapsed time (counts)*time/tick = elapsed time
+    if(Elapsed_Time*Period/1000 > Time) //End of run
     {
-      STOP(); 
-      while(1){};   //Require MCU reset -- safety measure
+      StopMotor(); 
+      Serial.println("Finished."); 
+      while(1){};   //Require MCU reset
     }
-        
-    Serial.println(Time); 
-    Serial.println(Motor_Speed); 
-    Serial.println(Controller_Input); 
      
   }
