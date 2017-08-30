@@ -62,7 +62,7 @@
   volatile float Step_Input = 0;
 
   //Duration of the test [in seconds]:
-  volatile float Time = 0; 
+  volatile float Time = 100; 
 
   
 
@@ -238,8 +238,8 @@ void  OpenLoopStep();
   {
     if(Go)
     {
-      RunMotor(200); 
-      delay(1); 
+      RunMotor(75); 
+      delay(2); 
     }
 
     if(Elapsed_Time*Period/1000 > Time) //End of run
