@@ -68,7 +68,7 @@ volatile float Ref_Input = 0;
 volatile float Step_Input = 0;
 
 //Duration of the test [in seconds]:
-volatile float Time = 5;
+volatile float Time = 5 * 60;         //# minutes * 60 seconds per minute
 
 
 
